@@ -96,6 +96,10 @@ def patch_apk(
         "--keystore-entry-alias", "jhc",
     ]
 
+    # ファイル検索ロジックに依存しないよう、outが指定されている場合は-oオプションで出力先を強制する
+    if out is not None:
+        command += ["-o", out]
+
     for i in includes:
         command += ["-e", i]
     for e in excludes:
@@ -116,24 +120,11 @@ def patch_apk(
         print("------------------------", file=sys.stderr)
         result.check_returncode()
 
+    # 指定したパスにファイルが正常に出力されたかだけを確認する
     if out is not None:
-        base_name = os.path.splitext(apk)[0]
-        all_apks = glob.glob("**/*.apk", recursive=True)
-        found_files = [
-            f for f in all_apks 
-            if base_name in os.path.basename(f) and "morphe" in os.path.basename(f).lower()
-        ]
-
-        if not found_files:
-            panic(f"Expected CLI output not found for: {base_name}")
-
-        cli_output = found_files[0]
-        print(f"  -> [DEBUG] Detected generated APK: {cli_output}")
-
-        if os.path.exists(out):
-            os.unlink(out)
-
-        shutil.move(cli_output, out)
+        if not os.path.exists(out):
+            panic(f"Expected CLI output not found at: {out}")
+        print(f"  -> [DEBUG] Detected generated APK: {out}")
 
 # リリース用処理
 def publish_release(tag: str, files: list[str], message: str, title=""):
