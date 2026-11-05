@@ -11,10 +11,10 @@ _scraper = None
 def get_scraper():
     global _scraper
     if _scraper is None:
-        import cloudscraper
-        _scraper = cloudscraper.create_scraper()
+        from curl_cffi import requests as cffi_requests
+        _scraper = cffi_requests.Session(impersonate="chrome")
         _scraper.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            "Accept-Language": "en-US,en;q=0.9",
         })
     return _scraper
 

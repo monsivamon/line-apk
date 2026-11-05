@@ -87,7 +87,10 @@ def download_apk(variant: Variant, path: str = "big_file.apkm"):
         raise FailedToFindElement("download link")
 
     direct_link_href = cast(Tag, direct_link).attrs["href"]
-    direct_link_url = f"https://www.apkmirror.com/{direct_link_href}"
+    if direct_link_href.startswith("http://") or direct_link_href.startswith("https://"):
+        direct_link_url = direct_link_href
+    else:
+        direct_link_url = f"https://www.apkmirror.com/{direct_link_href}"
     print(f"Direct link: {direct_link_url}")
 
     download(
