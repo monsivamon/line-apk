@@ -11,10 +11,10 @@ _scraper = None
 def get_scraper():
     global _scraper
     if _scraper is None:
-        import cloudscraper
-        _scraper = cloudscraper.create_scraper()
+        from curl_cffi import requests as cffi_requests
+        _scraper = cffi_requests.Session(impersonate="chrome")
         _scraper.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            "Accept-Language": "en-US,en;q=0.9",
         })
     return _scraper
 
@@ -35,7 +35,7 @@ def download(link, out, headers=None, use_scraper=False):
 
     if use_scraper:
         print(f"  -> [DEBUG] Downloading with scraper: {link}")
-    
+
     if headers is None:
         headers = {}
     if "Referer" not in headers:
@@ -43,18 +43,25 @@ def download(link, out, headers=None, use_scraper=False):
 
     session = get_scraper() if use_scraper else requests
 
+    r = None
     try:
-        with session.get(link, stream=True, headers=headers) as r:
-            r.raise_for_status()
-            with open(out, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
+        r = session.get(link, stream=True, headers=headers)
+        r.raise_for_status()
+        with open(out, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
     except Exception as e:
-        status = getattr(r, 'status_code', 'Unknown') if 'r' in locals() else 'Unknown'
+        status = getattr(r, "status_code", "Unknown") if r is not None else "Unknown"
         print(f"\n  -> [FATAL ERROR] Download blocked (Status: {status})")
         print(f"  -> Target: {link}")
         panic(f"Error details: {e}")
+    finally:
+        if r is not None:
+            try:
+                r.close()
+            except Exception:
+                pass
 
 # 外部シェルコマンドを実行し、失敗時はログを出力して異常終了する
 def run_command(command: list[str]):
