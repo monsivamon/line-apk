@@ -90,7 +90,7 @@ def download_apk(variant: Variant, path: str = "big_file.apkm"):
     if direct_link_href.startswith("http://") or direct_link_href.startswith("https://"):
         direct_link_url = direct_link_href
     else:
-        direct_link_url = f"https://www.apkmirror.com/{direct_link_href}"
+        direct_link_url = f"https://www.apkmirror.com/{direct_link_href.lstrip('/')}"
     print(f"Direct link: {direct_link_url}")
 
     download(
