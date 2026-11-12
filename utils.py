@@ -7,15 +7,54 @@ import glob
 
 _scraper = None
 
+# Cloudflare のチャレンジページ（HTTP 200 で返ってくる）かどうかを判定する
+def _is_challenge_page(res) -> bool:
+    if res is None or getattr(res, "status_code", None) != 200:
+        return False
+    try:
+        text = (res.text or "")[:5000]
+    except Exception:
+        return False
+    markers = (
+        "Just a moment", "cf-chl-", "__cf_chl_", "Checking your browser",
+        "Attention Required", "challenge-platform", "cf_chl_opt",
+    )
+    return any(m in text for m in markers)
+
+class _HybridSession:
+    def __init__(self) -> None:
+        import cloudscraper
+        try:
+            self._primary = cloudscraper.create_scraper(enable_stealth=True)
+        except TypeError:
+            self._primary = cloudscraper.create_scraper()
+        self._primary.headers.update({"User-Agent": "APKUpdater-v3.0.3"})
+        self._fallback = None
+        self.headers = self._primary.headers
+        print("[scraper] primary: cloudscraper (stealth + APKUpdater UA)", flush=True)
+
+    def _get_fallback(self):
+        if self._fallback is None:
+            from curl_cffi import requests as curl_requests
+            self._fallback = curl_requests.Session(impersonate="chrome124")
+            print("[scraper] fallback: curl_cffi (Chrome 124 full impersonation)", flush=True)
+        return self._fallback
+
+    def get(self, *args, **kwargs):
+        r = self._primary.get(*args, **kwargs)
+        if r.status_code == 403 or _is_challenge_page(r):
+            reason = "403" if r.status_code == 403 else "challenge page"
+            try: r.close()
+            except Exception: pass
+            print(f"[scraper] primary returned {reason}, retrying with curl_cffi...", flush=True)
+            r = self._get_fallback().get(*args, **kwargs)
+        return r
+
 # スクレイパーを取得
 def get_scraper():
     global _scraper
     if _scraper is None:
-        from curl_cffi import requests as cffi_requests
-        _scraper = cffi_requests.Session(impersonate="chrome")
-        _scraper.headers.update({
-            "Accept-Language": "en-US,en;q=0.9",
-        })
+        _scraper = _HybridSession()
     return _scraper
 
 # 致命的なエラーメッセージを表示し、スクリプトを強制終了する
@@ -47,8 +86,23 @@ def download(link, out, headers=None, use_scraper=False):
     try:
         r = session.get(link, stream=True, headers=headers)
         r.raise_for_status()
+        
+        # APK/APKM(HTMLチャレンジページ)の誤保存を防ぐ
+        chunks = r.iter_content(chunk_size=8192)
+        try:
+            first_chunk = next(chunks)
+        except StopIteration:
+            first_chunk = b""
+            
+        if first_chunk:
+            lower_chunk = first_chunk.lower()
+            if b"<html" in lower_chunk or b"<!doctype" in lower_chunk:
+                 raise RuntimeError(f"Downloaded file is HTML (challenge page), not an APK/APKM")
+
         with open(out, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
+            if first_chunk:
+                f.write(first_chunk)
+            for chunk in chunks:
                 if chunk:
                     f.write(chunk)
     except Exception as e:
@@ -103,7 +157,6 @@ def patch_apk(
         "--keystore-entry-alias", "jhc",
     ]
 
-    # ファイル検索ロジックに依存しないよう、outが指定されている場合は-oオプションで出力先を強制する
     if out is not None:
         command += ["-o", out]
 
@@ -127,7 +180,6 @@ def patch_apk(
         print("------------------------", file=sys.stderr)
         result.check_returncode()
 
-    # 指定したパスにファイルが正常に出力されたかだけを確認する
     if out is not None:
         if not os.path.exists(out):
             panic(f"Expected CLI output not found at: {out}")
