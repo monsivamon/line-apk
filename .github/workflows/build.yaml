@@ -1,4 +1,4 @@
-name: Build LINE APKs
+﻿name: Build LINE APKs
 
 on:
   schedule:
@@ -13,6 +13,7 @@ jobs:
       contents: write
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      APKMIRROR_PROXY: ${{ secrets.APKMIRROR_PROXY }}
     steps:
       - uses: actions/checkout@v5
       
@@ -30,6 +31,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+          python -m playwright install chromium || true
           
       - name: Run build pipeline
         run: |
